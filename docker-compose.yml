@@ -17,7 +17,7 @@ services:
 
   db:
     image: mysql:8.0
-    container_name: commuter_db
+    container_name: commuter
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: 1234
@@ -30,6 +30,11 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - backend_net
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db_data:
