@@ -35,3 +35,11 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Spring Boot application config
+application.yml
+application-*.yml
+
+### Docker ###
+Dockerfile
+docker-compose.yml

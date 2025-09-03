@@ -28,6 +28,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException, IOException {
+        String path = request.getRequestURI();
+
+        // 로그인, 회원가입
+        // 인증 제외 경로 → 필터 패스
+        if (path.startsWith("/api/auth")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String token = resolveToken(request);
 
         if (token != null && jwtTokenProvider.validateToken(token)) {
@@ -40,11 +49,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
             SecurityContextHolder.getContext().setAuthentication(auth);
-
-//            System.out.println("토큰: " + token);
-//            System.out.println("유효?: " + jwtTokenProvider.validateToken(token));
-//            System.out.println("인증 객체: " + SecurityContextHolder.getContext().getAuthentication());
-
         }
 
         filterChain.doFilter(request, response);
@@ -58,4 +62,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         return null;
     }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.startsWith("/api/auth/");
+    }
+
 }
