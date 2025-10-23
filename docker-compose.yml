@@ -6,9 +6,10 @@ services:
     ports:
       - "8000:8080"   # 호스트 8000 컨테이너 8080
     depends_on:
-      - db
+      db :
+        condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/commuter?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/commuter?serverTimezone=Asia/Seoul&characterEncoding=UTF-88&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: commuter
       SPRING_DATASOURCE_PASSWORD: commuter
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -35,7 +36,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
 volumes:
   db_data:
 
