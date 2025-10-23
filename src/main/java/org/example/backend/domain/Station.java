@@ -30,4 +30,9 @@ public class Station extends BaseEntity {
 
     @Column(unique = true)
     private String stationCode; // 외부 API 연동을 위한 역 코드
+
+    private String nameEng;
+
+    private String nameJpn;
+
 }

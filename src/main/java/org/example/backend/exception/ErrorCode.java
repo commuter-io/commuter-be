@@ -38,7 +38,11 @@ public enum ErrorCode {
     JSON_SERIALIZATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "J001", "JSON 직렬화에 실패했습니다."),
     JSON_DESERIALIZATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "J002", "JSON 역직렬화에 실패했습니다."),
 
-    FOLDER_NOT_FOUND(HttpStatus.NOT_FOUND, "F001", "폴더를 찾을 수 없습니다.");
+    FOLDER_NOT_FOUND(HttpStatus.NOT_FOUND, "F001", "폴더를 찾을 수 없습니다."),
+
+    // Subway API related
+    API_CALL_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "S001", "외부 API 호출에 실패했습니다."),
+    API_RESULT_ERROR(HttpStatus.BAD_REQUEST, "S002", "외부 API가 에러를 반환했습니다.");
 
     private final HttpStatus status;
     private final String code;

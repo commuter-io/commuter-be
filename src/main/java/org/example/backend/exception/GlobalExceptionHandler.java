@@ -10,6 +10,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(CustomException.class)
+    protected ResponseEntity<ApiResponse<Void>> handleCustomException(CustomException e) {
+        log.error("CustomException: {}", e.getErrorCode().getMessage());
+
+        ApiResponse<Void> response = ApiResponse.error(
+                e.getErrorCode().getMessage(),
+                e.getErrorCode().getCode()
+        );
+        return new ResponseEntity<>(response, e.getErrorCode().getStatus());
+    }
+
     @ExceptionHandler(Exception.class)
     protected ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
         log.error("Unexpected Exception: ", e);

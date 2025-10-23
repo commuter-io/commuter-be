@@ -23,6 +23,15 @@ public class ApiResponse<T> {
     private int statusCode;
     private LocalDateTime timestamp;
 
+    public static <T> ApiResponse<T> success() {
+        return ApiResponse.<T>builder()
+                .success(true)
+                .data(null)
+                .statusCode(HttpStatus.OK.value())
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+
     public static <T> ApiResponse<T> success(T data) {
         return ApiResponse.<T>builder()
                 .success(true)
@@ -31,6 +40,7 @@ public class ApiResponse<T> {
                 .timestamp(LocalDateTime.now())
                 .build();
     }
+
 
     public static <T> ApiResponse<T> success(T data, String message, HttpStatus status) {
         return ApiResponse.<T>builder()
