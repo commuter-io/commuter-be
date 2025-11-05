@@ -23,6 +23,8 @@ import java.util.Collections;
 import java.util.List;
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,9 +32,12 @@ public class SubwayService {
 
     private final RestTemplate restTemplate;
     private final StationRepository stationRepository;
+    private final ObjectMapper objectMapper;
 
     @Value("${seoul.api.key}")
     private String apiKey;
+    @Value("${seoul.live.key}")
+    private String liveApiKey;
 
     private static final String SEOUL_API_BASE_URL = "http://openapi.seoul.go.kr:8088/";
 
@@ -83,28 +88,52 @@ public class SubwayService {
 
     public List<RealtimeArrival.Arrival> getRealtimeArrivals(String stationName) {
         try {
-            String encodedStationName = java.net.URLEncoder.encode(stationName, java.nio.charset.StandardCharsets.UTF_8);
-            String url = "http://swopenAPI.seoul.go.kr/api/subway/" + apiKey + "/json/realtimeStationArrival/0/10/" + encodedStationName;
+            String url = "http://swopenAPI.seoul.go.kr/api/subway/" + liveApiKey + "/json/realtimeStationArrival/0/10/" + stationName;
 
-            RealtimeArrival response = restTemplate.getForObject(url, RealtimeArrival.class);
+            String rawResponse = restTemplate.getForObject(url, String.class);
+            log.info("Raw response from Seoul API for station {}: {}", stationName, rawResponse);
 
-            if (response != null && response.getRealtimeArrivalList() != null) {
+            RealtimeArrival response = objectMapper.readValue(rawResponse, RealtimeArrival.class);
+
+            // API가 에러 메시지를 반환했는지 확인 (INFO-000은 성공)
+            if (response.getErrorMessage() != null && !"INFO-000".equals(response.getErrorMessage().getCode())) {
+                log.warn("API returned a non-successful code for station {}: {}", stationName, response.getErrorMessage().getCode());
+                // INFO-200은 "해당하는 데이터가 없습니다." 이므로 빈 리스트를 반환.
+                if ("INFO-200".equals(response.getErrorMessage().getCode())) {
+                    return Collections.emptyList();
+                }
+                // 그 외 코드는 에러로 처리
+                throw new CustomException(ErrorCode.API_RESULT_ERROR, response.getErrorMessage().getMessage());
+            }
+
+            if (response.getRealtimeArrivalList() != null) {
                 return response.getRealtimeArrivalList();
             }
+
+            return Collections.emptyList();
+
+        } catch (RestClientException e) {
+            log.error("API call failed for station {}: {}", stationName, e.getMessage());
+            throw new CustomException(ErrorCode.API_CALL_FAILED);
         } catch (Exception e) {
-            // TODO: 예외 처리 로직 추가 (e.g., 로깅)
-            e.printStackTrace();
+            log.error("An unexpected error occurred in getRealtimeArrivals for station {}: {}", stationName, e.getMessage(), e);
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "실시간 도착 정보 조회 중 알 수 없는 오류가 발생했습니다.");
         }
-        return Collections.emptyList();
     }
 
     @Transactional(readOnly = true)
     public List<StationResponse> getStations(String line, String name) {
         List<Station> stations;
+        String formattedLine = formatLineNumber(line);
 
-        if (line != null && !line.isEmpty()) {
-            stations = stationRepository.findByLineNumber(line);
-        } else if (name != null && !name.isEmpty()) {
+        boolean hasLine = formattedLine != null && !formattedLine.isEmpty();
+        boolean hasName = name != null && !name.isEmpty();
+
+        if (hasLine && hasName) {
+            stations = stationRepository.findByLineNumberAndNameContaining(formattedLine, name);
+        } else if (hasLine) {
+            stations = stationRepository.findByLineNumber(formattedLine);
+        } else if (hasName) {
             stations = stationRepository.findByNameContaining(name);
         } else {
             stations = stationRepository.findAll();
@@ -113,6 +142,22 @@ public class SubwayService {
         return stations.stream()
                 .map(StationResponse::fromEntity)
                 .toList();
+    }
+
+    private String formatLineNumber(String line) {
+        if (line == null || line.isEmpty() || !line.contains("호선")) {
+            return line;
+        }
+        try {
+            String numberStr = line.replace("호선", "").trim();
+            int number = Integer.parseInt(numberStr);
+            if (number > 0 && number < 10) {
+                return String.format("0%d호선", number);
+            }
+            return line;
+        } catch (NumberFormatException e) {
+            return line;
+        }
     }
 
 }

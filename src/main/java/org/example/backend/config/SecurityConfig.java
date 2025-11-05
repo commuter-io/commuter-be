@@ -36,7 +36,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/api/auth/**").permitAll() // 로그인/회원가입 허용
                         .requestMatchers("/api/hello").permitAll() // 테스트용 API 허용
-                        .requestMatchers("/api/subway/**").permitAll() // 지하철 정보 API 허용
+                        .requestMatchers("/api/subway/**", "/api/stations/**").permitAll() // 지하철 정보 API 허용
                         .requestMatchers("/api/protected").authenticated()  // 인증만 필요
                         .anyRequest().authenticated()            // 그 외 요청은 인증 필요
                 )
