@@ -1,13 +1,11 @@
 package org.example.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.backend.domain.Station;
 import org.example.backend.domain.StationRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import org.example.backend.domain.Station;
+
 import org.example.backend.dto.response.RealtimeArrival;
 import org.example.backend.dto.response.StationResponse;
 import org.example.backend.exception.CustomException;
