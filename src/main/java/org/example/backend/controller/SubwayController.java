@@ -1,16 +1,12 @@
 package org.example.backend.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.example.backend.controller.SubwayControllerDocs;
+import org.example.backend.domain.Notice;
 import org.example.backend.dto.common.ApiResponse;
 import org.example.backend.dto.response.RealtimeArrival;
 import org.example.backend.service.SubwayService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -33,5 +29,16 @@ public class SubwayController implements SubwayControllerDocs {
     public ResponseEntity<ApiResponse<List<RealtimeArrival.Arrival>>> getRealtimeArrivals(@PathVariable String stationName) {
         List<RealtimeArrival.Arrival> arrivals = subwayService.getRealtimeArrivals(stationName);
         return ResponseEntity.ok(ApiResponse.success(arrivals));
+    }
+
+    @Override
+    @GetMapping("/notices")
+    public ResponseEntity<ApiResponse<List<Notice>>> getSubwayNotices(
+            @RequestParam(required = false) String line,
+            @RequestParam(required = false) String incidentType,
+            @RequestParam(required = false) String stationName
+    ) {
+        List<Notice> notices = subwayService.getNoticesFromDB(line, incidentType, stationName);
+        return ResponseEntity.ok(ApiResponse.success(notices));
     }
 }

@@ -1,27 +1,27 @@
 package org.example.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.backend.domain.Station;
-import org.example.backend.domain.StationRepository;
-
+import org.example.backend.domain.*;
 import org.example.backend.dto.response.RealtimeArrival;
 import org.example.backend.dto.response.StationResponse;
+import org.example.backend.dto.response.SubwayNoticeResponse;
 import org.example.backend.exception.CustomException;
 import org.example.backend.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Service
@@ -30,6 +30,7 @@ public class SubwayService {
 
     private final RestTemplate restTemplate;
     private final StationRepository stationRepository;
+    private final NoticeRepository noticeRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${seoul.api.key}")
@@ -37,16 +38,15 @@ public class SubwayService {
     @Value("${seoul.live.key}")
     private String liveApiKey;
 
-    private static final String SEOUL_API_BASE_URL = "http://openapi.seoul.go.kr:8088/";
+    private static final String SEOUL_API_BASE_URL = "http://openapi.seoul.go.kr:8088";
 
     @Transactional
     public void updateStationDatabase() {
-        String url = SEOUL_API_BASE_URL + apiKey + "/json/SearchSTNBySubwayLineInfo/1/1000/";
+        String url = SEOUL_API_BASE_URL + "/" + apiKey + "/json/SearchSTNBySubwayLineInfo/1/1000/";
 
         try {
             JsonNode response = restTemplate.getForObject(url, JsonNode.class);
 
-            // API 결과 코드 확인
             JsonNode resultCodeNode = response.path("SearchSTNBySubwayLineInfo").path("RESULT").path("CODE");
             if (!"INFO-000".equals(resultCodeNode.asText())) {
                 String errorMessage = response.path("SearchSTNBySubwayLineInfo").path("RESULT").path("MESSAGE").asText();
@@ -93,14 +93,11 @@ public class SubwayService {
 
             RealtimeArrival response = objectMapper.readValue(rawResponse, RealtimeArrival.class);
 
-            // API가 에러 메시지를 반환했는지 확인 (INFO-000은 성공)
             if (response.getErrorMessage() != null && !"INFO-000".equals(response.getErrorMessage().getCode())) {
                 log.warn("API returned a non-successful code for station {}: {}", stationName, response.getErrorMessage().getCode());
-                // INFO-200은 "해당하는 데이터가 없습니다." 이므로 빈 리스트를 반환.
                 if ("INFO-200".equals(response.getErrorMessage().getCode())) {
                     return Collections.emptyList();
                 }
-                // 그 외 코드는 에러로 처리
                 throw new CustomException(ErrorCode.API_RESULT_ERROR, response.getErrorMessage().getMessage());
             }
 
@@ -158,4 +155,105 @@ public class SubwayService {
         }
     }
 
+    @Transactional
+    public void fetchAndSaveNotices(int pageNo, int numOfRows) {
+        String serviceName = "getNtceList";
+        String url = String.join("/", SEOUL_API_BASE_URL, apiKey, "json", serviceName, String.valueOf(pageNo), String.valueOf(numOfRows));
+
+        try {
+            log.info("Calling Seoul Open API: {}", url);
+            String rawResponse = restTemplate.getForObject(url, String.class);
+            log.info("Raw response from Subway Notice API: {}", rawResponse);
+
+            if (rawResponse == null || rawResponse.trim().isEmpty()) {
+                log.error("Subway Notice API returned an empty response.");
+                throw new CustomException(ErrorCode.API_RESULT_ERROR, "API 응답이 비어있습니다.");
+            }
+
+            SubwayNoticeResponse response = objectMapper.readValue(rawResponse, SubwayNoticeResponse.class);
+
+            if (response != null && response.getResponse() != null && response.getResponse().getHeader() != null && "00".equals(response.getResponse().getHeader().getResultCode())) {
+                List<SubwayNoticeResponse.NoticeItem> items = response.getResponse().getBody().getItems().getItem();
+                if (items != null) {
+                    for (SubwayNoticeResponse.NoticeItem item : items) {
+                        noticeRepository.findByNoticeTitleAndStartDate(item.getNoticeTitle(), item.getStartDate())
+                                .orElseGet(() -> {
+                                    Notice notice = Notice.builder()
+                                            .noticeTitle(item.getNoticeTitle())
+                                            .noticeContent(item.getNoticeContent())
+                                            .lineList(item.getLineList())
+                                            .incidentType(IncidentType.fromString(item.getNoticeTitle()))
+                                            .startDate(item.getStartDate())
+                                            .endDate(item.getEndDate())
+                                            .stationCodeList(item.getStationCodeList())
+                                            .nonstopYn(item.getNonstopYn())
+                                            .noticeCode(item.getNoticeCode())
+                                            .createdDate(item.getCreatedDate())
+                                            .occurredDate(item.getOccurredDate())
+                                            .upDownBound(item.getUpDownBound())
+                                            .build();
+                                    return noticeRepository.save(notice);
+                                });
+                    }
+                }
+            } else {
+                String errorCode = (response != null && response.getResponse() != null && response.getResponse().getHeader() != null) ? response.getResponse().getHeader().getResultCode() : "UNKNOWN_CODE";
+                String errorMessage = (response != null && response.getResponse() != null && response.getResponse().getHeader() != null) ? response.getResponse().getHeader().getResultMsg() : "Unknown API error or malformed response.";
+                log.error("Subway Notice API returned an error. Code: {}, Message: {}", errorCode, errorMessage);
+
+                if (!"INFO-200".equals(errorCode)) {
+                    throw new CustomException(ErrorCode.API_RESULT_ERROR, errorMessage);
+                }
+            }
+        } catch (RestClientException e) {
+            log.error("Subway Notice API call failed: {}", e.getMessage());
+            throw new CustomException(ErrorCode.API_CALL_FAILED);
+        } catch (Exception e) {
+            log.error("An unexpected error occurred in fetchAndSaveNotices: {}", e.getMessage(), e);
+            throw new CustomException(ErrorCode.INTERNAL_SERVER_ERROR, "지하철 알림 정보 조회 및 저장 중 오류 발생");
+        }
+    }
+
+    @Scheduled(cron = "0 */5 * * * *") // 5분마다 실행
+    public void scheduleNoticeUpdates() {
+        log.info("Fetching and saving subway notices...");
+        fetchAndSaveNotices(1, 50); // 우선 최근 50개만 가져오도록 설정
+    }
+
+    @Transactional(readOnly = true)
+    public List<Notice> getNoticesFromDB(String line, String incidentType, String stationName) {
+        Specification<Notice> spec = (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            if (line != null && !line.isEmpty()) {
+                predicates.add(criteriaBuilder.like(root.get("lineList"), "%" + line + "%"));
+            }
+
+            if (incidentType != null && !incidentType.isEmpty()) {
+                try {
+                    IncidentType type = IncidentType.valueOf(incidentType.toUpperCase());
+                    predicates.add(criteriaBuilder.equal(root.get("incidentType"), type));
+                } catch (IllegalArgumentException e) {
+                    return criteriaBuilder.disjunction();
+                }
+            }
+
+            if (stationName != null && !stationName.isEmpty()) {
+                List<Station> stations = stationRepository.findByNameContaining(stationName);
+                if (stations.isEmpty()) {
+                    return criteriaBuilder.disjunction();
+                }
+                Predicate stationPredicate = criteriaBuilder.disjunction();
+                for (Station station : stations) {
+                    stationPredicate = criteriaBuilder.or(stationPredicate,
+                            criteriaBuilder.like(root.get("stationCodeList"), "%" + station.getStationCode() + "%"));
+                }
+                predicates.add(stationPredicate);
+            }
+
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return noticeRepository.findAll(spec);
+    }
 }
